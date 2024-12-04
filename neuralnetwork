@@ -1,0 +1,183 @@
+import numpy as np
+
+# Load dataset
+data = np.loadtxt('cross_data.csv', delimiter=',')
+X = data[:, 0:2]  # Input features
+y = data[:, 2]    # Target values (0 or 1)
+
+# Load initial weights and biases
+W1 = np.loadtxt('w1.csv', delimiter=',').T  # Shape: (2, 10)
+b1 = np.loadtxt('b1.csv', delimiter=',')  # Shape: (10,)
+W2 = np.loadtxt('w2.csv', delimiter=',').reshape(10, 1)  # Shape: (10, 1)
+b2 = np.loadtxt('b2.csv', delimiter=',').reshape(1)  # Shape: (1,)
+
+# Parameters
+alpha = 0.7  # Learning rate
+beta = 0.1   # Momentum term
+
+# Initialize momentum terms
+momentum_W1 = np.zeros_like(W1)
+momentum_b1 = np.zeros_like(b1)
+momentum_W2 = np.zeros_like(W2)
+momentum_b2 = np.zeros_like(b2)
+
+# Debugging
+print("Input X shape:", X.shape)    # Should be (314, 2)
+print("W1 shape:", W1.shape)       # Should be (2, 10)
+print("b1 shape:", b1.shape)       # Should be (10,)
+print("W2 shape:", W2.shape)       # Should be (10, 1)
+print("b2 shape:", b2.shape)       # Should be (1,)
+
+# Sigmoid activation function
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+# Mean squared error loss function
+def mse_loss(y_true, y_pred):
+    return 0.5 * np.mean((y_true - y_pred) ** 2)
+
+def forward_pass(X, W1, b1, W2, b2):
+    # Hidden layer
+    z1 = np.dot(X, W1) + b1  # Linear transformation
+    a1 = sigmoid(z1)         # Activation function
+    
+    # Output layer
+    z2 = np.dot(a1, W2) + b2  # Linear transformation
+    a2 = sigmoid(z2)          # Activation function
+    
+    return a1, a2
+
+def backward_pass(X, y, a1, a2, W2):
+    # Output layer error
+    error_output = a2 - y 
+    dW2 = np.dot(a1.T, error_output * a2 * (1 - a2))  # Gradient w.r.t. W2
+    db2 = np.sum(error_output * a2 * (1 - a2), axis=0)  # Gradient w.r.t. b2
+    
+    # Hidden layer error
+    error_hidden = np.dot(error_output * a2 * (1 - a2), W2.T)
+    dW1 = np.dot(X.T, error_hidden * a1 * (1 - a1))  # Gradient w.r.t. W1
+    db1 = np.sum(error_hidden * a1 * (1 - a1), axis=0)  # Gradient w.r.t. b1
+    
+    return dW1, db1, dW2, db2
+
+def update_weights(W1, b1, W2, b2, dW1, db1, dW2, db2, momentum_W1, momentum_b1, momentum_W2, momentum_b2):
+    # Update weights with momentum
+    momentum_W1 = beta * momentum_W1 + (1 - beta) * dW1
+    momentum_b1 = beta * momentum_b1 + (1 - beta) * db1
+    momentum_W2 = beta * momentum_W2 + (1 - beta) * dW2
+    momentum_b2 = beta * momentum_b2 + (1 - beta) * db2
+    
+    # Apply weight updates
+    W1 -= alpha * momentum_W1
+    b1 -= alpha * momentum_b1
+    W2 -= alpha * momentum_W2
+    b2 -= alpha * momentum_b2
+    
+    return W1, b1, W2, b2, momentum_W1, momentum_b1, momentum_W2, momentum_b2
+
+# Initialize average error energy
+avg_error_energy = 0
+
+# Initialize error energies
+error_energies = []
+
+# Perform one epoch of training
+for i in range(X.shape[0]):
+    # Forward pass
+    a1, a2 = forward_pass(X[i:i+1], W1, b1, W2, b2)
+    
+    # Compute loss (error energy) for this sample
+    error_energy = mse_loss(y[i:i+1], a2)
+    avg_error_energy += error_energy
+    
+    # Backpropagation
+    dW1, db1, dW2, db2 = backward_pass(X[i:i+1], y[i:i+1], a1, a2, W2)
+    
+    # Update weights
+    W1, b1, W2, b2, momentum_W1, momentum_b1, momentum_W2, momentum_b2 = update_weights(
+        W1, b1, W2, b2, dW1, db1, dW2, db2, momentum_W1, momentum_b1, momentum_W2, momentum_b2
+    )
+
+# Calculate the average error energy after the first epoch
+avg_error_energy /= X.shape[0]
+print(f"Average Error Energy after First Epoch: {avg_error_energy}")
+
+# Print b2 after the first epoch
+print(f"Output Layer Bias (b2) after First Epoch: {b2.item():.4f}")
+print(X.shape[0])
+
+import pandas as pd
+
+# Convert weights and biases to DataFrames for better display
+W1_df = pd.DataFrame(W1.T, columns=['Input 1', 'Input 2'], index=[f'Neuron {i+1}' for i in range(W1.shape[1])])
+b1_df = pd.DataFrame(b1, columns=['Bias'], index=[f'Neuron {i+1}' for i in range(b1.shape[0])])
+W2_df = pd.DataFrame(W2.reshape(-1, 1), columns=['Output'], index=[f'Neuron {i+1}' for i in range(W2.shape[0])])
+b2_df = pd.DataFrame({'Bias': [b2]})
+
+# Display the weights and biases
+print("Hidden Layer Weights (W1):")
+print(W1_df.to_string(float_format="{:.4f}".format))
+print("\nHidden Layer Biases (b1):")
+print(b1_df.to_string(float_format="{:.4f}".format))
+print("\nOutput Layer Weights (W2):")
+print(W2_df.to_string(float_format="{:.4f}".format))
+print("\nOutput Layer Bias (b2):")
+print(b2_df.to_string(index=False, float_format="{:.4f}".format))
+
+# Randomize dataset order for subsequent epochs
+np.random.shuffle(data)
+X_shuffled = data[:, 0:2]
+y_shuffled = data[:, 2]
+
+# Training loop for subsequent epochs
+prev_error_energy = avg_error_energy
+while True:
+    avg_error_energy = 0
+    for i in range(X_shuffled.shape[0]):
+        # Perform forward pass and backpropagation as before
+        a1, a2 = forward_pass(X_shuffled[i:i+1], W1, b1, W2, b2)
+        error_energy = mse_loss(y_shuffled[i:i+1], a2)
+        avg_error_energy += error_energy
+        dW1, db1, dW2, db2 = backward_pass(X_shuffled[i:i+1], y_shuffled[i:i+1], a1, a2, W2)
+        W1, b1, W2, b2, momentum_W1, momentum_b1, momentum_W2, momentum_b2 = update_weights(
+            W1, b1, W2, b2, dW1, db1, dW2, db2, momentum_W1, momentum_b1, momentum_W2, momentum_b2
+        )
+
+    avg_error_energy /= X_shuffled.shape[0]
+    error_energies.append(avg_error_energy)
+
+    # Check if the change in error energy is less than the threshold
+    if abs(avg_error_energy - prev_error_energy) < 0.001:
+        break
+    prev_error_energy = avg_error_energy
+
+import matplotlib.pyplot as plt
+
+# Plot average error energy per epoch
+epochs = range(1, len(error_energies)+1)
+plt.plot(epochs, error_energies)
+plt.xlabel('Epochs')
+plt.ylabel('Average Error Energy')
+plt.title('Average Error Energy Per Epoch')
+plt.show()
+
+# To plot the decision boundary, you can create a grid of points and predict their output
+# then plot using a contour plot.
+
+# Generate grid points for the decision boundary
+x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
+y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+xx, yy = np.meshgrid(np.linspace(x_min, x_max, 500), np.linspace(y_min, y_max, 500))
+grid_points = np.c_[xx.ravel(), yy.ravel()]
+
+# Forward pass on the grid points
+_, a2_grid = forward_pass(grid_points, W1, b1, W2, b2)
+a2_grid = a2_grid.reshape(xx.shape)
+
+# Plot the decision boundary
+plt.contour(xx, yy, a2_grid, levels=[0.5], cmap="Greys", linestyles="dashed")
+plt.scatter(X[:, 0], X[:, 1], c=y, cmap='coolwarm', edgecolor='k')
+plt.title("Final Decision Boundary")
+plt.xlabel("Feature 1")
+plt.ylabel("Feature 2")
+plt.show()
